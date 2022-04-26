@@ -6,6 +6,8 @@ using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Threading.Tasks;
+using WebApiDapper.Dtos;
+using WebApiDapper.Filters;
 using WebApiDapper.Models;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
@@ -27,6 +29,7 @@ namespace WebApiDapper.Controllers
         [HttpGet]
         public async Task<IEnumerable<Product>> Get()
         {
+            throw new Exception("Test");
             using (var conn = new SqlConnection(_connectionString))
             {
                 if (conn.State == System.Data.ConnectionState.Closed)
@@ -51,9 +54,38 @@ namespace WebApiDapper.Controllers
             }
         }
 
+        // GET paging api/<ProductController>/5
+        [HttpGet("GetPaging")]
+        public async Task<PagedResult<Product>> GetPaging(string keyword, int categoryId, int pageIndex, int pageSize)
+        {
+            using (var conn = new SqlConnection(_connectionString))
+            {
+                if (conn.State == System.Data.ConnectionState.Closed)
+                    conn.Open();
+                var parameters = new DynamicParameters();
+                parameters.Add("@keyword", keyword);
+                parameters.Add("@categoryId", categoryId);
+                parameters.Add("@pageIndex", pageIndex);
+                parameters.Add("@pageSize", pageSize);
+                parameters.Add("@totalRow", dbType: System.Data.DbType.Int32, direction: System.Data.ParameterDirection.Output);
+                var result = await conn.QueryAsync<Product>("Get_Product_AllPaging", parameters, null, null, System.Data.CommandType.StoredProcedure);
+
+                int totalRow = parameters.Get<int>("@totalRow");
+                var pagedResult = new PagedResult<Product>()
+                {
+                    Items = result.ToList(),
+                    TotalRow = totalRow,
+                    PageIndex = pageIndex,
+                    PageSize = pageSize
+                };
+                return pagedResult;
+            }
+        }
+
         // POST api/<ProductController>
         [HttpPost]
-        public async Task<int> Post([FromBody] Product product)
+        [ValidateModel]
+        public async Task<IActionResult> Post([FromBody] Product product)
         {
             int newId = 0;
             using (var conn = new SqlConnection(_connectionString))
@@ -69,13 +101,14 @@ namespace WebApiDapper.Controllers
                 var result = await conn.ExecuteAsync("Create_Product", parameters, null, null, System.Data.CommandType.StoredProcedure);
 
                 newId = parameters.Get<int>("@id");
+                return Ok(newId);
             }
-            return newId;
         }
 
         // PUT api/<ProductController>/5
         [HttpPut("{id}")]
-        public async Task Put(int id, [FromBody] Product product)
+        [ValidateModel]
+        public async Task<IActionResult> Put(int id, [FromBody] Product product)
         {
             using (var conn = new SqlConnection(_connectionString))
             {
@@ -88,6 +121,7 @@ namespace WebApiDapper.Controllers
                 parameters.Add("@isActive", product.IsActive);
                 parameters.Add("@imageUrl", product.ImageUrl);
                 await conn.ExecuteAsync("Update_Product", parameters, null, null, System.Data.CommandType.StoredProcedure);
+                return Ok();
             }
         }
 
